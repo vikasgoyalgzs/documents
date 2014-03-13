@@ -1,0 +1,41 @@
+sortArray: function (left, right, direction, multiSortCols) {
+        var a = left.criteria;
+        var b = right.criteria;
+
+        if (a === void 0 && b === void 0) {
+            return left.index < right.index ? -1 : 1;
+        }
+
+        if (a !== b) {
+            if (direction === 'desc') {
+
+                //Do an early return if one of the values are undefined
+                if ( a === void 0 ) return 1;
+                if ( b === void 0 ) return -1;
+
+                if (a > b) return -1;
+                if (a < b) return 1;
+
+            } else {
+
+                //Do an early return if one of the values are undefined
+                if ( a === void 0 ) return -1;
+                if ( b === void 0 ) return 1;
+
+                if (a > b) return 1;
+                if (a < b) return -1;
+
+            }
+        } else {
+            var sortProp = multiSortCols.shift();
+            if (sortProp) {
+                var propParts = sortProp.split("."),
+                    propName = propParts[0],
+                    sortDirection = propParts[1];
+                left.criteria = this.setupCriteria(propName, left.value);
+                right.criteria = this.setupCriteria(propName, right.value);
+                return AIMS.common.utilities.sortArray(left, right, sortDirection, multiSortCols.slice(0, multiSortCols.length));
+            }
+            return left.index < right.index ? -1 : 1;
+        }
+    },
