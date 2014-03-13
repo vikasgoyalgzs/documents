@@ -1,3 +1,21 @@
+ multiSortBy: function (obj, sortProp, direction, multiSortCols) {
+        return _.pluck(_.map(obj, function (item, index, list) {
+            var mappedObj = {
+                value: item,
+                index: index
+            };
+            if (item.sort_date) {
+                mappedObj.value.date = moment(item.sort_date, "YYYY-MM-DD HH:mm:ss").valueOf();
+            }
+
+            return mappedObj;
+        }).sort(function (left, right) {
+            left.criteria = AIMS.common.utilities.setupCriteria(sortProp, left.value);
+            right.criteria = AIMS.common.utilities.setupCriteria(sortProp, right.value);
+            return AIMS.common.utilities.sortArray(left, right, direction, multiSortCols.slice(0, multiSortCols.length));
+        }), 'value');
+    },
+
 sortArray: function (left, right, direction, multiSortCols) {
         var a = left.criteria;
         var b = right.criteria;
