@@ -1,22 +1,336 @@
- multiSortBy: function (obj, sortProp, direction, multiSortCols) {
-        return _.pluck(_.map(obj, function (item, index, list) {
-            var mappedObj = {
-                value: item,
-                index: index
-            };
-            if (item.sort_date) {
-                mappedObj.value.date = moment(item.sort_date, "YYYY-MM-DD HH:mm:ss").valueOf();
+AIMS.common.utilities = {
+    attachEscapeKeyHandler: function (handler) {
+        var eventName = 'keydown.overlayEscape',
+            $document = $(document);
+                     
+        $document.on(eventName,  function (e) {
+            if (e.which === 27) {
+                handler();
+                e.preventDefault();
             }
+        });
+    },
+    getDstSwitchDates: function () {
+        var year = new Date().getYear(),
+            firstSwitch = 0,
+            secondSwitch = 0,
+            lastOffset = 99,
+            i, tz,
+            newDate,
+            secondDstDate,
+            firstDstDate;
 
-            return mappedObj;
-        }).sort(function (left, right) {
-            left.criteria = AIMS.common.utilities.setupCriteria(sortProp, left.value);
-            right.criteria = AIMS.common.utilities.setupCriteria(sortProp, right.value);
-            return AIMS.common.utilities.sortArray(left, right, direction, multiSortCols.slice(0, multiSortCols.length));
-        }), 'value');
+        if (year < 1000) {
+            year += 1900;
+        }
+        // Loop through every month of the current year
+        for (i = 0; i < 12; i++) {
+            // Fetch the timezone value for the month
+            newDate = new Date(Date.UTC(year, i, 0, 0, 0, 0, 0));
+            tz = -1 * newDate.getTimezoneOffset() / 60;
+
+            // Capture when a timzezone change occurs
+            if (tz > lastOffset) {
+                firstSwitch = i - 1;
+            } else {
+                if (tz < lastOffset) {
+                    secondSwitch = i - 1;
+                }
+            }
+            lastOffset = tz;
+        }
+
+        // Go figure out date/time occurences a minute before
+        // a DST adjustment occurs
+        secondDstDate = this.findDstSwitchDate(year, secondSwitch);
+        firstDstDate = this.findDstSwitchDate(year, firstSwitch);
+
+        return { start: firstDstDate, end: secondDstDate };
     },
 
-sortArray: function (left, right, direction, multiSortCols) {
+    findDstSwitchDate: function (year, month) {
+        // Set the starting date
+        var baseDate = new Date(Date.UTC(year, month, 0, 0, 0, 0, 0)),
+            changeDay = 0,
+            changeMinute = -1,
+            baseOffset = -1 * baseDate.getTimezoneOffset() / 60,
+            dstDate,
+            day,
+            tmpDate,
+            tmpOffset,
+            minutes;
+
+        // Loop to find the exact day a timezone adjust occurs
+        for (day = 0; day < 50; day++) {
+            tmpDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            tmpOffset = -1 * tmpDate.getTimezoneOffset() / 60;
+
+            // Check if the timezone changed from one day to the next
+            if (tmpOffset !== baseOffset) {
+                minutes = 0;
+                changeDay = day;
+
+                // Back-up one day and grap the offset
+                tmpDate = new Date(Date.UTC(year, month, day - 1, 0, 0, 0, 0));
+                tmpOffset = -1 * tmpDate.getTimezoneOffset() / 60;
+
+                // Count the minutes until a timezone chnage occurs
+                while (changeMinute === -1) {
+                    tmpDate = new Date(Date.UTC(year, month, day - 1, 0, minutes, 0, 0));
+                    tmpOffset = -1 * tmpDate.getTimezoneOffset() / 60;
+
+                    // Determine the exact minute a timezone change
+                    // occurs
+                    if (tmpOffset !== baseOffset) {
+                        // Back-up a minute to get the date/time just
+                        // before a timezone change occurs
+                        tmpOffset = new Date(Date.UTC(year, month,
+                                             day - 1, 0, minutes - 1, 0, 0));
+                        changeMinute = minutes;
+                        break;
+                    }
+                    else {
+                        minutes++;
+                    }
+                }
+
+                // Add a month (for display) since JavaScript counts
+                // months from 0 to 11
+                dstDate = tmpOffset.getMonth() + 1;
+
+                // Pad the month as needed
+                if (dstDate < 10) {
+                    dstDate = "0" + dstDate;
+                }
+                // Add the day and year
+                dstDate += '/' + tmpOffset.getDate() + '/' + year + ' ';
+
+                // Capture the time stamp
+                tmpDate = new Date(Date.UTC(year, month,
+                                   day - 1, 0, minutes - 1, 0, 0));
+                //dstDate += tmpDate.toTimeString().split(' ')[0];
+                return dstDate;
+            }
+        }
+    },
+
+    getQueryString: function (url) {
+        var queryList = {},
+            queryString = url || window.location.href,
+            query = queryString.slice(queryString.lastIndexOf('?') + 1),
+            hashes = query.split('&'),
+            i = 0, hash;
+
+        for (; (hash = hashes[i]) ; i++) {
+            hash = hash.split('=');
+            if (hash[1]) {
+                queryList[hash[0]] = decodeURIComponent((typeof hash[1] === 'string') ? hash[1].replace(/_ques_/g, '?').replace(/_eq_/g, '=').replace(/_amp_/g, '&') : hash[1]);
+            }
+        }
+
+        return queryList;
+    },
+
+    trimNConvertToCaps: function (inputObj, noCaps) {
+        var prop, value, processedValue, i, j;
+        if (!inputObj) {
+            return "";
+        }
+        if (typeof inputObj === "object") {
+            if (inputObj.splice) {    //array
+                for (i = 0; i < inputObj.length; i++) {
+                    value = inputObj[i];
+                    if (value && typeof value === "string") {
+                        processedValue = value.replace(/^[\n\r\t\s]+|[\n\r\t\s]+$/g, "");
+                        inputObj[i] = noCaps ? processedValue : processedValue.toUpperCase();
+                    }
+                }
+            } else {
+                for (prop in inputObj) {  //object
+                    if (inputObj.hasOwnProperty(prop)) {
+                        value = inputObj[prop];
+                        var tempValue = "";
+                        var valueParts;
+                        if (value && typeof value === "string") {
+                            if (value.indexOf(":") > -1) {
+                                valueParts = value.split(":");
+                                for (j = 0; j < valueParts.length; j++) {
+                                    processedValue = valueParts[j].replace(/^[\n\r\t\s]+|[\n\r\t\s]+$/g, "");
+                                    tempValue = tempValue + ":" + (noCaps ? processedValue : processedValue.toUpperCase());
+                                }
+                                value = tempValue.replace(/^:/, "");
+                            }
+                            if (value.indexOf("|") > -1) {
+                                tempValue = "";
+                                valueParts = value.split("|");
+                                for (j = 0; j < valueParts.length; j++) {
+                                    processedValue = valueParts[j].replace(/^[\n\r\t\s]+|[\n\r\t\s]+$/g, "");
+                                    tempValue = tempValue + "|" + (noCaps ? processedValue : processedValue.toUpperCase());
+                                }
+                                value = tempValue.replace(/^\|/, "");
+                            }
+                            if (value) {
+                                processedValue = value.replace(/^[\n\r\t\s]+|[\n\r\t\s]+$/g, "");
+                                inputObj[prop] = noCaps ? processedValue : processedValue.toUpperCase();
+                            }
+                        }
+
+                    }
+                }
+            }
+            return inputObj;
+        }
+        processedValue = inputObj.replace(/^[\n\r\t\s]+|[\n\r\t\s]+$/g, "");
+        return noCaps ? processedValue : processedValue.toUpperCase();
+    },
+
+    log: function (logTxt) {
+        if (AIMS.vars.enableDebug) {
+            console.log(logTxt);
+        }
+    },
+    getAssetAsOfDate: function (path, completeCallback) {
+        path = path + '/jcr:content/data.json';
+        $.ajax({
+            url: path,
+            dataType: 'json',
+            success: completeCallback,
+            error: completeCallback
+        });
+    },
+
+    getVideoPath: function (videoItemPath) {
+        var videoPath = videoItemPath || "",
+            $videoContainer,
+            flashVars,
+            subPart,
+            $video,
+            parts,
+            i;
+
+        if (!videoPath) {
+            $video = $('#videoWindow').find('video');
+            if ($video && $video.length > 0) {
+                videoPath = $video.attr('src');
+            } else {
+                $videoContainer = $('#videoWindow div#video,div.assetVideo:visible');
+                $video = $videoContainer.find('object param[name=flashvars]');
+                if ($video) {
+                    flashVars = $video.attr('value');
+                    if (flashVars) {
+                        parts = flashVars.split('&');
+                        for (i = 0; i < parts.length; i++) {
+                            subPart = parts[i].split('=');
+                            if (subPart[0] === 'src') {
+                                videoPath = unescape(subPart[1]);
+                                break;
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        if (videoPath) {
+            videoPath = videoPath.replace(/jcr:content.*/, '').replace(/%20/g, ' ');
+            if (videoPath.substr(-1) === '/') {
+                videoPath = videoPath.substr(0, videoPath.length - 1);
+            }
+        }
+        return videoPath;
+    },
+
+    auditJSONresults: function (itemResults, requiredFields) {
+        var removeItemArray = [];
+
+        $.each(itemResults, function (i, item) {
+            $.each(requiredFields, function (ii, field) {
+                if (!itemResults[i].item[field]) {
+                    removeItemArray.push(i);
+                    return false;
+                }
+            });
+        });
+
+        if (removeItemArray) {
+            // reverse sort order
+            removeItemArray.sort(function (a, b) { return b - a });
+            // loop through to remove
+            $.each(removeItemArray, function (i, index) {
+                itemResults.splice(index, 1);
+            });
+        }
+
+        return itemResults;
+
+    },
+
+    executeJqueryTemplate: function (templateName, item) {
+        var templateArray = {
+            viewMoreTooltipTpl: '<div><div class="scroll-wrapper viewmore-tooltip tinyscrollbar view-scroll"><div class="scrollbar"><div class="track"><div class="thumb"><div class="end"></div></div></div></div><div class="viewport tooltip-viewport"><div class="overview">${description}</div></div></div>',
+            contentPreviewTpl: '<div class="content-preview"> <div class="mainItem"></div> <div class="itemExtras"> <nav> <ul> <li data-content="summary" class="active"><span><a>Summary</a></span></li> <li data-content="related"><span><a>Related</a></span></li> </ul> </nav> <div class="contentBlock"> <section class="summary active"> <p>${body}</p> </section> <section class="related clearfix"></section> </div> </div> </div>',
+            contentPreviewItemTpl: '<div class="item-preview ${type} ${documenttype} clearfix" data-itempath="${url}"> <div class="thumbnail"><img src="{{if image}}${image}{{else}}/etc/clientlibs/aims/shared/img/icons/content_preview/${type}.png{{/if}}" /></div> <div class="details"> <h1 title="${title}">${title}</h1> {{if author}}<p class="author">${author}</p>{{/if}} <p class="meta"><span class="icon"></span><span class="documenttype">${documentTypeLabel}</span>{{if dateCrtd}} / <span class="dateCrtd">${dateCrtd}</span>{{/if}}</p> {{if addOptions}} <div class="options"> <a class="view common-btn" data-itempath="${url}">View</a> <a class="favorite common-btn" data-itempath="${url}">Add to Library</a> </div> {{/if}} </div> </div>',
+            simpleModal: '<div class="modal_dialog{{if modal_class}} ${modal_class}{{/if}}"{{if modal_id}} id="${modal_id}"{{/if}}> ${message} <div class="buttonHolder"> ${button_list} {{if close_button_txt}}<button class="common-btn close">${close_button_txt}</button>{{/if}} </div> </div>',
+            timelineTpl: '<li class="result_item dropboxItem dropboxLink ${category}{{if new_item}} new{{/if}} ${document_type}" data-itempath="${item_path}" data-title="${title}"><a class="expander-sim small"></a><div class="search_content ${category}"><h1 class="section custom" data-link="${item_path}">${display_category}</h1><h1 class="title">${title}</h1><span class="search_added_date"><span class="date">${display_date}</span></span><div class="document" style="display:none;"><a class="download_link data-link custom" data-link="${item_path}" href="#">Download</a></div><span class="search_sort_date">${sort_date}</span></div><span class="icon"></span><span class="flag"></span></li>',
+            timelineTplIntFund: '<li class="result_item dropboxItem dropboxLink {{if new_item}} new{{/if}} ${document_type}" data-itempath="${item_path}" data-title="${title}"><a class="expander-sim small"></a><div class="search_content ${category}"><h1 class="section custom" data-link="${item_path}">REPORT</h1><h1 class="title">${title}</h1><span class="search_added_date"><span class="date">${display_date}</span></span><div class="document" style="display:none;"><a class="download_link data-link custom" data-link="${item_path}" href="#">Download</a></div></div><span class="icon"></span><span class="flag"></span></li>',
+            listTpl: '<li class="treeTpl search_content result_item dropboxItem ${category}{{if new_item}} new{{/if}} ${document_type}" data-itempath="${item_path}" data-title="${title}"><div class="clearfix"><div class="titleDiv"><h1 class="title dropboxLink custom" data-link="${item_path}">${title}</h1></div><div class="dateDiv"><span class="search_added_date"><span class="date">${date_received}</span></span></div></div></li>',
+            libraryListTpl: '<tr class=\"fund_list_item filter_list_item libListTpl data-link custom result_item ${category}{{if category == "playlist"}} plist-trigger{{/if}}\" data-itempath="${item_path}"{{if category == "playlist"}} data-href="${item_path}"{{/if}} data-title="${title}" data-id="${id}" data-type="library-playlist"><td class=\"name\" title="${title}">${title}</td><td class=\"author\">${author}</td><td class=\"small_icon\"><a href=\"#\"></a></td><td class=\"date\">${display_date}</td></tr>',
+            libraryGridTpl: '<li class="fund_list_item libGridTpl data-link custom result_item ${category} clearfix{{if category == "playlist"}} plist-trigger{{/if}} {{if category == "manager" || category == "fund"}}fund-manager{{else}}standard_item{{/if}}" data-itempath="${item_path}"{{if category == "playlist"}} data-href="${item_path}"{{/if}} data-title="${title}" data-id="${id}" data-doctype="${category}" data-type="library-playlist"> {{if category == "manager" || category == "fund"}}  <div class="fund-manager-wrap"> <div class="item_thumb">{{if image_path}}<img src="${image_path}" />{{/if}}</div> <div class="grid-item-details"> <span class="title" title="${title}"> <span class="icon"></span> ${title} </span> {{if category == "fund"}}  <ul class="fund-info"> {{if asset_class}} <li title="${asset_class}">${short_asset_class}</li> {{/if}} </ul> {{/if}}  </div> </div> {{else}} <div class="fund_info grid-item-details"> <span class="title" title="${title}"> <span class="icon"></span> ${title} </span> </div> <div class="item_thumb">{{if image_path}}<img src="${image_path}" />{{/if}}</div> {{/if}} </li>',
+            playlistOverlayJsonTpl: '<div class="playlist-tpl"> <div class="ajax-targ"> <div class="playlist-wrap plist-all custom-playlist json-playlist"> <div class="top-bar clearfix"> <h2 class="fl plistname-targ title-count"><span class="limit-title">${title}</span> <span class="count-container">(<span id="plist-count">${item_count}</span>)</span></h2> <input type="hidden" value="${title}" id="playlist-title" /> <div class="fr clearfix view-options"> {{if view == "grid"}} <label class="fl" id="sort-dropdown"> <span class="lbl-noPointer">Sort By:</span> <select id="plist-sort" class="sort-by"> <option value="date" selected="selected">Date</option> <option value="title">Title</option> </select> </label> {{/if}} <div class="fl view-btns clearfix"> <a href="#" class="common-icon view-btn list fl" title="List view" data-view="list"></a> <a href="#" class="common-icon view-btn grid active fl" title="Grid view" data-view="grid"></a> </div> </div> </div> <div id="listing-targ" class="listing-wrap"> {{if action == 1 || view == "grid"}} <div id="playlist-scrollwrap" class="tinyscrollbar"> <div class="scrollbar"><div class="track"><div class="thumb"><div class="end"></div></div></div></div> <div class="viewport grid-wrap"> {{/if}} <div class="overview"> <div class="listing{{if view == "list"}} dsp-table{{/if}}"> {{if view == "list"}} <div class="dsp-row thead"> <div class="dsp-cell sortable title" id="sort-title" data-sort-name="title">Title</div> <div class="dsp-cell sortable title" id="sort-author" data-sort-name="author">Author</div> <div class="dsp-cell sortable title" id="sort-type" data-sort-name="type">Type</div> <div class="dsp-cell sortable title asc" id="sort-date" data-sort-name="date">Date Published</div> </div> {{/if}} </div> {{if action == 1 || view == "grid"}} </div> </div> {{/if}} </div> </div> </div> </div> </div>',
+            playlistGridItemJsonTpl: '<div class="grid-item force-hover ${category} custom custom-trigger plist-trigger"{{if documenttype}} data-doctype="${documenttype}"{{/if}} data-href="${item_path}" data-title="${title}"> {{if image_path}}<img src="${image_path}"/>{{/if}} <div class="grid-item-details"> <span class="title" title="${title}"> <span class="icon"></span> ${title} </span> </div> </div>',
+            playlistListItemJsonTpl: '<div class="playlist-item dsp-row force-hover ${category} custom custom-trigger plist-trigger"{{if documenttype}} data-doctype="${documenttype}"{{/if}} data-href="${item_path}" data-title="${title}"> <div class="dsp-cell name"><span>${title}</span></div> <div class="author dsp-cell">${author}</div> <div class="type dsp-cell"> <span class="icon ${category}"></span> </div> <div class="date dsp-cell">${display_date}</div> </div>',
+            playlistOverlayTpl: '<div class="playlist-tpl"> <div class="ajax-targ"> <div class="playlist-wrap custom-playlist"> <h3 class="module-title">Playlist</h3> <div class="top-bar clearfix"> <h2 class="fl plistname-targ title-count"><span class="limit-title">${title}</span> <span class="count-container">(<span id="plist-count">${item_count}</span>)</span></h2> <input type="hidden" value="${title}" id="playlist-title" /> <div class="filter-options fl uniform clearfix"> <div class="cbox-col fl"> <label title="All" class="filter-option"> <input type="checkbox" value="all" checked=""class="filter-cbox all" />All </label> <label title="Documents" class="filter-option"> <input type="checkbox" value="pdf|excel|powerpoint|word" class="filter-cbox" />Documents </label> </div> <div class="cbox-col fl"> <label title="News" class="filter-option"> <input type="checkbox" value="news" class="filter-cbox" />News </label> <label title="Videos" class="filter-option"> <input type="checkbox" value="video" class="filter-cbox" />Videos </label> </div> <div class="cbox-col fl"> <label title="Fund Profile" class="filter-option"> <input type="checkbox" value="fund" class="filter-cbox" />Fund Profile </label> <label title="Manager Profiles" class="filter-option"> <input type="checkbox" value="manager" class="filter-cbox" />Manager Profile </label> </div> <div class="cbox-col fl"> <label title="Playlist" class="filter-option"> <input type="checkbox" value="playlist" class="filter-cbox" />Playlists </label> <label title="Solutions Profile" class="filter-option"> <input type="checkbox" value="internalfund" class="filter-cbox" />Solutions Profile </label> </div> </div> <div class="fr clearfix view-options"> {{if view == "grid"}} <label class="fl" id="sort-dropdown"> <span class="lbl-noPointer">Sort By:</span> <select id="plist-sort" class="sort-by"> <option value="author">Author</option> <option value="date" selected="selected">Date</option> <option value="title">Title</option> </select> </label> {{/if}} <div class="fl view-btns clearfix"> <a href="#" class="common-icon view-btn list fl" title="List view" data-view="list"></a> <a href="#" class="common-icon view-btn grid active fl" title="Grid view" data-view="grid"></a> </div> </div> </div> <div id="listing-targ" class="listing-wrap"> {{if action == 1 || view == "grid"}} <div id="playlist-scrollwrap" class="tinyscrollbar"> <div class="scrollbar"><div class="track"><div class="thumb"><div class="end"></div></div></div></div> <div class="viewport">{{/if}} <div class="overview"> <div class="listing{{if view == "list"}} dsp-table{{/if}}"> {{if view == "list"}} <div class="dsp-row thead"> <div class="dsp-cell sortable title" id="sort-title" data-sort-name="title">Title</div> <div class="dsp-cell sortable title" id="sort-author" data-sort-name="author">Author</div> <div class="dsp-cell sortable title" id="sort-type" data-sort-name="type">Type</div> <div class="dsp-cell sortable title asc" id="sort-date" data-sort-name="date">Date Published</div> </div> {{/if}} </div> {{if action == 1 || view == "grid"}}</div> </div>{{/if}} </div> </div> </div> </div> </div>',
+            playlistGridItemTpl: '<div class="item-wrap"><div class="playlist-item clearfix force-hover ${category}{{if category=="playlist"}} plist-trigger{{else}} overlay-trigger{{/if}}" data-doctype="${category}" data-href="${item_path}" data-title="${title}"><div class="img fl ${category}">{{if image_path}}<img src="${image_path}"/>{{/if}}</div><div class="info grid-item-details fl"><h5 class="name">${title}</h5><span class="author">${author}</span><span class="desc-date"><span class="desc"><span class="icon ${category}"></span>${category_description}</span>{{if as_of_date}}<span class="date"> / ${as_of_date}</span>{{/if}}</span></div></div></div>',
+            playlistListItemTpl: '<div class="playlist-item dsp-row force-hover ${category}{{if category == "playlist"}} plist-trigger{{else}} overlay-trigger{{/if}}" data-doctype="${category}" data-href="${item_path}" data-title="${title}"> <div class="dsp-cell name"><span>${title}</span></div> <div class="author dsp-cell">${author}</div> <div class="type dsp-cell"> <span class="icon ${category}"></span> </div> <div class="date dsp-cell">${as_of_date}</div> </div>',
+            logoutWarningTpl: '<div id="idletimeout" class="warningBox small"><p>You will be logged off in <span class="timerCount"><!-- countdown place holder --></span> seconds due to inactivity.</p><p><a id="idletimeout-resume" href="#">Click here to continue using this web page.</a></p></div>',
+            defaultTpl: '<li class="result_item libraryItem ${category}" data-itempath="${item_path}" data-title="${title}"><input type="checkbox" class="deleteMe" /><div class="search_content ${category} ${document_type}"><h1 class="title data-link custom" data-link="${item_path}">${title}</h1><span class="search_added_date">Added: <span class="date">${display_date}</span></span>{{if category=="document"}}<div class="more_info document"><a class="download_link data-link custom" data-link="${item_path}" href="#">Download</a><a data-itempath="${item_path}" href="#" class="library active" title="Remove from Library" style="display:none">Remove from Library</a></div>{{/if}}<span class="search_sort_date">${sort_date}</span></div></li>'
+        },
+        jquery_template = templateArray[templateName];
+
+        item.display_date = item.date_received ? moment(item.date_received).format('MMM DD YYYY') : '';
+        item.aum_display_date = "";
+        if (item.aum_date) {
+            item.aum_display_date = "(" + moment(item.aum_date).format('MMM D YYYY') + ")";
+        }
+
+        if (item.as_of_date) {
+            item.as_of_date = moment(item.as_of_date).format('MMM D YYYY');
+        }
+
+        if (item.category) {
+            item.display_category = item.category.replace(/_/g, ' ');
+        }
+
+        if (templateName == 'playlistGridItemTpl' || templateName == 'playlistListItemTpl') {
+            if (item.category == 'document' && item.category_description == 'PDF') {
+                item.category = 'pdf';
+            }
+            if (item.category == 'fund' || item.category == 'internalfund' || item.category == 'manager') {
+                item.item_path = item.item_path + '.html';
+            }
+        }
+
+        if (item.title) {
+            item.short_title = item.title.length < 24 ? item.title : item.title.substring(0, 24) + '…';
+            item.med_title = item.title.length < 45 ? item.title : item.title.substring(0, 45) + '…';
+        }
+        return $.tmpl(jquery_template, item);
+    },
+
+    htmlEncode: function (value) {
+        value = $('<div/>').text(value).html();
+        value = value.replace(/"/g, "&quot;");
+        return value;
+    },
+
+    htmlDecode: function (value) {
+        value = value.replace("&quot;", /"/g);
+        value = $('<div/>').html(value).text();
+        return value;
+    },
+
+    sortArray: function (left, right, direction, multiSortCols) {
         var a = left.criteria;
         var b = right.criteria;
 
@@ -57,3 +371,113 @@ sortArray: function (left, right, direction, multiSortCols) {
             return left.index < right.index ? -1 : 1;
         }
     },
+
+    setupCriteria: function (sortProp, item) {
+        if (sortProp === 'date') {
+            return item.date;
+        } else {
+            var propVal = item[sortProp];
+            if (typeof propVal === 'string') {
+                return propVal.replace(/(^\s+|\s+$)/g, '').toLowerCase();
+            }
+            return propVal;
+        }
+    },
+
+    multiSortBy: function (obj, sortProp, direction, multiSortCols) {
+        return _.pluck(_.map(obj, function (item, index, list) {
+            var mappedObj = {
+                value: item,
+                index: index
+            };
+            if (item.sort_date) {
+                mappedObj.value.date = moment(item.sort_date, "YYYY-MM-DD HH:mm:ss").valueOf();
+            }
+
+            return mappedObj;
+        }).sort(function (left, right) {
+            left.criteria = AIMS.common.utilities.setupCriteria(sortProp, left.value);
+            right.criteria = AIMS.common.utilities.setupCriteria(sortProp, right.value);
+            return AIMS.common.utilities.sortArray(left, right, direction, multiSortCols.slice(0, multiSortCols.length));
+        }), 'value');
+    },
+    commonHeader: function (className) {
+        var $body = AIMS.constants.$body,
+            hasClass = $body.hasClass(className);
+
+        $(".commonHeader").on({
+            mouseenter: function (e) {
+                if (hasClass) {
+                    $(this).css("cursor", "pointer");
+                } else {
+                    $(this).css("cursor", "default");
+                }
+            },
+            mouseleave: function (e) {
+                // body...
+            },
+            click: function (e) {
+                if (!hasClass) {
+                    e.preventDefault();
+                    return false;
+                }
+            }
+        });
+    },
+    addEllipsis: function (elem, truncHeight, wrapType) {
+        if (elem.length) {
+            var params = { height: truncHeight };
+            if (wrapType) {
+                params.wrap = wrapType;
+            }
+            elem.dotdotdot(params);
+        }
+    }
+};
+
+
+
+
+//Add peek function to array prototype
+Array.prototype.peek = function () {
+    var len = this.length;
+    if (len > 0) {
+        return this[len - 1];
+    }
+    return undefined;
+};
+
+Array.prototype.smartJoin = function (separator) {
+    var resultString = '',
+        currentItem,
+        i,
+        sep = separator || '';
+
+    if (this.length === 0) {
+        return resultString;
+    }
+    resultString = this[0];
+    for (i = 1; i < this.length; i++) {
+        currentItem = this[i];
+        if (currentItem) {
+            resultString = resultString + sep + currentItem;
+        }
+    }
+    return resultString;
+};
+
+String.prototype.trimNConvertToCaps = function () {
+    return AIMS.common.utilities.trimNConvertToCaps(this.toString());
+};
+//Add contains function to string prototype
+String.prototype.containsAny = function (inputObj) {
+    var val = this.toString();
+    if (inputObj && typeof inputObj.splice === "function") {
+        for (var i = 0, len = inputObj.length; i < len; i++) {
+            if (val.indexOf(inputObj[i]) > -1) {
+                return true;
+            }
+        }
+    }
+
+};
