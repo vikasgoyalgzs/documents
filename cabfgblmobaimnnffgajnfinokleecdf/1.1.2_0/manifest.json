@@ -1,0 +1,15 @@
+{
+   "description": "A Fork of Zero Dark Matrix styled Monokai style",
+   "devtools_page": "devtools.html",
+   "homepage_url": "https://github.com/antoniobrandao",
+   "icons": {
+      "128": "images/icon128.png",
+      "16": "images/icon16.png",
+      "48": "images/icon48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAttex1k2e+pDyo4imslwCkrcRm0EnjOtm4nRY0sQrv/8+U7bDy3iy6h9moEM72EcRqkPKWoeZXPoQW7RWwDUnm385URDgKEJL7NIfiCBSVe3rscttnJqD0mTqwcjJynK8Ft3q0dliggMUBkC8Smb7DatOTVdLY3vQLmfyt4vE9jMUljnHf0dcowiPWet0RKn78dhIMeZBgRdLf1Phi5cl9q1398jssc7BZkYZvvXinu4cBGCsbTd7CS2AVlfnhoGpBf/E6xFhQ9PHN8sSuZWUTWybh+87oINLmqC6IQsdWXpfEVZPrRdCMswHT4TqAin0oJWLTBdjFRfhtjzePcVrQQIDAQAB",
+   "manifest_version": 2,
+   "name": "Antonio Brandao Devtools Monokai Theme",
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.1.2"
+}
